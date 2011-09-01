@@ -35,21 +35,28 @@ def build(repository = nil, version = nil)
     FileUtils.mkdir("#{config["build"]["root"]}") unless File.exist?("#{config["build"]["root"]}")
     FileUtils.rm_rf("#{config["build"]["root"]}/#{path}/#{version}") if File.exist?("#{config["build"]["root"]}/#{path}/#{version}")
     FileUtils.mkdir_p("#{config["build"]["root"]}/#{path}/#{version}")
-    system("cd #{config["build"]["root"]}/#{path} && git clone --depth 1 #{repository} #{version}")
-    system("cd #{config["build"]["root"]}/#{path}/#{version} && bundle install --path .bundled > /dev/null 2>&1")
+    checkout_cmd = "cd #{config["build"]["root"]}/#{path} && git clone --depth 1 #{repository} #{version}"
+    checkout_log = `#{checkout_cmd}`
+    raise SystemCallError, checkout_log unless $?.to_i == 0
+    build_cmd = "cd #{config["build"]["root"]}/#{path}/#{version} && bundle install --path .bundled > /dev/null 2>&1"
+    build_log = `#{build_cmd}`
+    raise SystemCallError, build_log unless $?.to_i == 0
     img = ""
     rs_dir = ""
+    img_cmd = ""
     if is_linux?
       img = "#{path}-#{version}.sqsh"
       rs_dir = "sqshed_apps"
-      system("cd #{config["build"]["root"]}/#{path} && mksquashfs #{path}/#{version} #{img}")
+      img_cmd = "cd #{config["build"]["root"]}/#{path} && mksquashfs #{path}/#{version} #{img}"
     elsif is_mac?
       img = "#{path}-#{version}.tgz"
       rs_dir = "sqshed_apps_test"
-      system("cd #{config["build"]["root"]}/#{path} && tar -czf #{img} #{version}")
+      img_cmd = "cd #{config["build"]["root"]}/#{path} && tar -czf #{img} #{version}"
     else
       raise ArgumentError, "platform is not correct"
     end
+    img_log = `#{img_cmd}`
+    raise SystemCallError, img_log unless $?.to_i == 0
     storage = Fog::Storage.new(:provider => 'Rackspace', :rackspace_auth_url => config["rackspace_auth_url"], :rackspace_api_key => config["rackspace_api_key"], :rackspace_username => config['rackspace_username'])
     directory = storage.directories.get(rs_dir)
     directory.files.create(:key => "#{img}", :body => File.open("#{config["build"]["root"]}/#{path}/#{img}"))
