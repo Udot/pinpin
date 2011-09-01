@@ -3,3 +3,4 @@ tmp/
 bundler/
 .bundled
 bundled
+config.yml
