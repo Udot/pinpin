@@ -10,7 +10,10 @@ require "fileutils"
 
 
 def logger(severity, message)
-  file = File.open('/var/log/pinpin_builder/builder.log', File::WRONLY | File::APPEND)
+  current_path = File.expand_path(File.dirname(__FILE__))
+  config = YAML.load_file("#{current_path}/config.yml")["dev"] if is_mac?
+  config = YAML.load_file("#{current_path}/config.yml")["prod"] if is_linux?
+  file = File.open(config['log_file'], File::WRONLY | File::APPEND)
     # To create new (and to remove old) logfile, add File::CREAT like;
     #   file = open('foo.log', File::WRONLY | File::APPEND | File::CREAT)
   the_logger = Logger.new(file, 'daily')
@@ -97,7 +100,7 @@ config = YAML.load_file("#{current_path}/config.yml")["dev"] if is_mac?
 config = YAML.load_file("#{current_path}/config.yml")["prod"] if is_linux?
 redis = Redis.new(:host => config['redis']['host'], :port => config['redis']['port'], :password => config['redis']['password'], :db => config['redis']['database'])
 
-logger.("info", "starting")
+logger("info", "starting")
 
 loop do
   queue = JSON.parse(redis.get("queue"))
