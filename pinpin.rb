@@ -13,9 +13,7 @@ def logger(severity, message)
   current_path = File.expand_path(File.dirname(__FILE__))
   config = YAML.load_file("#{current_path}/config.yml")["dev"] if is_mac?
   config = YAML.load_file("#{current_path}/config.yml")["prod"] if is_linux?
-  file = File.open(config['logfile'], File::WRONLY | File::APPEND)
-    # To create new (and to remove old) logfile, add File::CREAT like;
-    #   file = open('foo.log', File::WRONLY | File::APPEND | File::CREAT)
+  file = File.open(config['logfile'], "a")
   the_logger = Logger.new(file, 'daily')
   case severity
   when "info"
