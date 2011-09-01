@@ -8,6 +8,22 @@ require "digest/sha1"
 require "yaml"
 require "fileutils"
 
+
+def logger(severity, message)
+  file = File.open('/var/log/pinpin_builder/builder.log', File::WRONLY | File::APPEND)
+    # To create new (and to remove old) logfile, add File::CREAT like;
+    #   file = open('foo.log', File::WRONLY | File::APPEND | File::CREAT)
+  the_logger = Logger.new(file, 'daily')
+  case severity
+  when "info"
+    the_logger.info message
+  when "error"
+    the_logger.error message
+  when "fatal"
+    the_logger.fatal message
+  end
+end
+
 def is_mac?
   RUBY_PLATFORM.downcase.include?("darwin")
 end
@@ -63,9 +79,11 @@ def build(repository = nil, version = nil)
   rescue => e
     p e.message
     p e.backtrace
+    logger("error", e.message)
     status = {"status" => "failed", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => e.message, "backtrace" => e.backtrace}}.to_json
     redis.set(repository, status)
   end
+  logger("info", "build and uploaded #{repository} #{version}")
   status = {"status" => "built", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
   redis.set(repository, status)
 end
