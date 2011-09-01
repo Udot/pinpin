@@ -4,3 +4,4 @@ gem "json"
 gem "redis"
 gem 'fog'
 gem "cramp"
+gem "daemons"
