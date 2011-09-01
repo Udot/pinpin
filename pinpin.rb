@@ -42,7 +42,7 @@ def build(repository = nil, version = nil)
     if is_linux?
       img = "#{path}-#{version}.sqsh"
       rs_dir = "sqshed_apps"
-      system("cd #{config["build"]["root"]}/ && mksquashfs #{path}/#{version} #{img}")
+      system("cd #{config["build"]["root"]}/#{path} && mksquashfs #{path}/#{version} #{img}")
     elsif is_mac?
       img = "#{path}-#{version}.tgz"
       rs_dir = "sqshed_apps_test"
