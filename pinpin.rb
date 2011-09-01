@@ -7,7 +7,7 @@ Bundler.require(:default)
 require "digest/sha1"
 require "yaml"
 require "fileutils"
-
+require "logger"
 
 def logger(severity, message)
   current_path = File.expand_path(File.dirname(__FILE__))
