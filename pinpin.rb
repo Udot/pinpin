@@ -33,6 +33,7 @@ def is_linux?
 end
 
 def build(repository = nil, version = nil)
+  logger("info", "build for #{repository} #{version} starts.")
   current_path = File.expand_path(File.dirname(__FILE__))
   config = YAML.load_file("#{current_path}/config.yml")["dev"] if is_mac?
   config = YAML.load_file("#{current_path}/config.yml")["prod"] if is_linux?
@@ -51,9 +52,11 @@ def build(repository = nil, version = nil)
     FileUtils.mkdir("#{config["build"]["root"]}") unless File.exist?("#{config["build"]["root"]}")
     FileUtils.rm_rf("#{config["build"]["root"]}/#{path}/#{version}") if File.exist?("#{config["build"]["root"]}/#{path}/#{version}")
     FileUtils.mkdir_p("#{config["build"]["root"]}/#{path}/#{version}")
+    logger("info", "cloning #{repository} #{version}")
     checkout_cmd = "cd #{config["build"]["root"]}/#{path} && git clone --depth 1 #{repository} #{version}"
     checkout_log = `#{checkout_cmd}`
     raise SystemCallError, checkout_log unless $?.to_i == 0
+    logger("info", "bundle install #{repository} #{version}")
     build_cmd = "cd #{config["build"]["root"]}/#{path}/#{version} && bundle install --path .bundled > /dev/null 2>&1"
     build_log = `#{build_cmd}`
     raise SystemCallError, build_log unless $?.to_i == 0
@@ -71,6 +74,7 @@ def build(repository = nil, version = nil)
     else
       raise ArgumentError, "platform is not correct"
     end
+    logger("info", "creating image #{repository} #{version}")
     img_log = `#{img_cmd}`
     raise SystemCallError, img_log unless $?.to_i == 0
     storage = Fog::Storage.new(:provider => 'Rackspace', :rackspace_auth_url => config["rackspace_auth_url"], :rackspace_api_key => config["rackspace_api_key"], :rackspace_username => config['rackspace_username'])
@@ -83,7 +87,7 @@ def build(repository = nil, version = nil)
     status = {"status" => "failed", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => e.message, "backtrace" => e.backtrace}}.to_json
     redis.set(repository, status)
   end
-  logger("info", "build and uploaded #{repository} #{version}")
+  logger("info", "built and uploaded #{repository} #{version}")
   status = {"status" => "built", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
   redis.set(repository, status)
 end
@@ -92,6 +96,8 @@ current_path = File.expand_path(File.dirname(__FILE__))
 config = YAML.load_file("#{current_path}/config.yml")["dev"] if is_mac?
 config = YAML.load_file("#{current_path}/config.yml")["prod"] if is_linux?
 redis = Redis.new(:host => config['redis']['host'], :port => config['redis']['port'], :password => config['redis']['password'], :db => config['redis']['database'])
+
+logger.("info", "starting")
 
 loop do
   queue = JSON.parse(redis.get("queue"))
