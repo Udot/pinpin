@@ -10,7 +10,7 @@
   "rackspace_auth_url": "https://lon.auth.api.rackspacecloud.com/v1.0"
   "rackspace_api_key": "thekey"
   "rackspace_username": "theusername"
-  "logfile": '/var/log/pinpin_builder/builder.log'
+  "logfile": 'builder.log'
 "prod":
   "sleeptime": 300
   "redis":
@@ -23,5 +23,5 @@
   "rackspace_auth_url": "https://lon.auth.api.rackspacecloud.com/v1.0"
     "rackspace_api_key": "thekey"
     "rackspace_username": "theusername"
-    "logfile": 'builder.log'
+    "logfile": '/var/log/pinpin_builder/builder.log'
 
