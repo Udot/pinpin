@@ -1,0 +1,25 @@
+"dev":
+  "sleeptime": 30
+  "redis":
+    "host": "localhost"
+    "port": 6379
+    "password": ""
+    "db": 0
+  "build":
+    "root": "build/"
+  "rackspace_auth_url": "https://lon.auth.api.rackspacecloud.com/v1.0"
+  "rackspace_api_key": "thekey"
+  "rackspace_username": "theusername"
+"prod":
+  "sleeptime": 300
+  "redis":
+    "host": "theremote.host"
+    "port": 6379
+    "password": "somepassword"
+    "db" : 0
+  "build":
+    "root": "/var/build"
+  "rackspace_auth_url": "https://lon.auth.api.rackspacecloud.com/v1.0"
+    "rackspace_api_key": "thekey"
+    "rackspace_username": "theusername"
+
