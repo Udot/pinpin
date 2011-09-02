@@ -1,15 +1,19 @@
 # Pinpin, the app packager
 
 > Pinpin is a great person, even if what he says
-> can soud crazy some times
+> can sound crazy some times
 
-Pinpin is a Ruby app packager. It use a Redis server as queue every 30 seconds (on a mac, aka my dev platform, 300 seconds on a linux aka my hosting platform) shallow clone each repository passed there, bundle install in the app directory, then pack the directory in a squashfs image. In the end it uploads the resulting file to a RackSpace CloudFiles directory.
+Pinpin is a Ruby app packager. It use a Redis server as queue every 30 seconds (on a mac, aka my dev platform, 300 seconds on a linux aka my hosting platform) shallow clone each repository passed there, bundle install in the app directory, then pack the directory in a tar gz ball (squasfs was a good idea until Debian squeeze told me that it didn't know how to speak squashfs). In the end it uploads the resulting file to a RackSpace CloudFiles directory.
 
 ## A word about the state
 
 Obviously from the previous paragraph you know that this is a early version and mostly a proof of concept. Lots of details could be improved.
 
 ## How it works exactly
+
+### Installation
+
+To setup and launch Pinpin you *must avoid* using *bundler* not that I don't like the guy but because it will cause trouble and failure of the process. The reason is simple : Pinpin use bundler to install the gems in _vendor/bundle_ directory in your app folder (so you _can user bundler for the apps to be packaged_). Calling _bundle install_ from a ruby app using _bundler_ is calling for trouble, so instead rely either on the system gems, or better still, on a _rvm gemset_ (or equivalent).
 
 ### Configuration
 
