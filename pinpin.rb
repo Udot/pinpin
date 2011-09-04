@@ -16,10 +16,16 @@ def is_linux?
    RUBY_PLATFORM.downcase.include?("linux")
 end
 
+def environment
+  return "development" if is_mac?
+  return "production" if is_linux?
+end
+
 @current_path = File.expand_path(File.dirname(__FILE__))
-@config = YAML.load_file("#{@current_path}/config.yml")["dev"] if is_mac?
-@config = YAML.load_file("#{@current_path}/config.yml")["prod"] if is_linux?
+
+@config = YAML.load_file("#{@current_path}/config.yml")[environment]
 @redis = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => @config['redis']['database'])
+@redis_deploy = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => 1)
 
 def logger(severity, message)
   file = File.open(@config['logfile'], "a")
@@ -34,7 +40,7 @@ def logger(severity, message)
   file.close
 end
 
-def build(repository = nil, version = nil)
+def build(repository = nil, version = nil, backoffice = false, cuddy_token)
   logger("info", "build for #{repository} #{version} starts.")
   status = JSON.parse(@redis.get(repository)) if (@redis.get(repository) != nil)
   start_time = status['started_at'] 
@@ -99,6 +105,17 @@ def build(repository = nil, version = nil)
   logger("info", "built and uploaded #{repository} #{version}")
   status = {"status" => "built", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
   @redis.set(repository, status)
+  #  {"version" => integer,      # the version number
+  #   "name" => string,           # the name of the app
+  #   "status" => string,         # starts with "waiting"
+  #   "started_at" => datetime,   # the time when the app was added in the queue
+  #   "finished_at" => datetime,  # the time when the app was properly deployed
+  #   "backoffice" => boolean,      # is the app a backoffice thing (will not create db and use different init script)
+  #   "config" => { "unicorn" => { "workers" => integer },      # only if not back office
+  #     "db" => {"hostname" => string, "database" => string, "username" => string, "token" => string}   # only if not back office
+  #   }
+  status = {"name" => path, "version" => version, "started_at" => start_time, "finished_at" => Time.now, "backoffice" => backoffice}.to_json
+  @redis_deploy.set(cuddy_token,status)
 end
 
 logger("info", "starting")
@@ -112,7 +129,7 @@ while true
     status = {"status" => "queued", "version" => repository['version'], "started_at" => Time.now, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
     @redis.set(repository['repository'], status)
     logger("info", "starting work on #{repository['repository']}")
-    build(repository['repository'], repository['version'])
+    build(repository['repository'], repository['version'], repository['backoffice'] || false, repository['cuddy_token'])
   end
   Signal.trap("QUIT") do
     logger("info", "quitting (received SIGQUIT)")

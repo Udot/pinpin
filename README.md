@@ -20,7 +20,7 @@ To setup and launch Pinpin you *must avoid* using *bundler* not that I don't lik
 The configuration happens in the _config.yml_ file :
 
 ```
-  "dev":
+  "development":
     "sleeptime": 30
     "redis":
       "host": "localhost"
@@ -32,7 +32,7 @@ The configuration happens in the _config.yml_ file :
     "rackspace_auth_url": "https://lon.auth.api.rackspacecloud.com/v1.0"
     "rackspace_api_key": "thekey"
     "rackspace_username": "theusername"
-  "prod":
+  "production":
     "sleeptime": 300
     "redis":
       "host": "theremote.host"
@@ -52,13 +52,13 @@ Here is sample. You can see two main sections : _dev_ and _prod_. Pinpin loads o
 You need a Redis server. You can configure the details in the _config.yml_ file but you need to know that Pinpin will except some stuff from the Redis server. Namely : a _jsoned_ _queue_ key containing an array of one or more hash like this one :
 
 ```
-  {"repository" => "git://github.com/mcansky/Pinpin-builder.git", "version" => "0.3"}
+  {"repository" => "git://github.com/mcansky/Pinpin-builder.git", "version" => "0.3", "backoffice" => true/false, "cuddy_token" => "sometoken"}
 ```
 
 To be clear, in Ruby you'd tell your Redis something like this :
 
 ```
-  redis.set "queue", [{"repository" => "git://github.com/mcansky/Pinpin-builder.git", "version" => "0.1"}].to_json
+  redis.set "queue", [{"repository" => "git://github.com/mcansky/Pinpin-builder.git", "version" => "0.1", "backoffice" => true/false, "cuddy_token" => "sometoken"}].to_json
 ```
 
 Each run, Pinpin will grab this queue and pop the repositories hash one by one, and do the build thing for each. At the end it reset the queue key. For each build, Pinpin will insert an object using the repository address as key and the following similar jsoned hash :
