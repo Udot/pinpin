@@ -25,7 +25,6 @@ end
 
 @config = YAML.load_file("#{@current_path}/config.yml")[environment]
 @redis = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => @config['redis']['database'])
-@redis_deploy = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => 1)
 
 def logger(severity, message)
   file = File.open(@config['logfile'], "a")
@@ -41,6 +40,9 @@ def logger(severity, message)
 end
 
 def build(repository = nil, version = nil, backoffice = false, cuddy_token)
+  if cuddy_token
+    redis_deploy = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => 1)
+  end
   logger("info", "build for #{repository} #{version} starts.")
   status = JSON.parse(@redis.get(repository)) if (@redis.get(repository) != nil)
   start_time = status['started_at'] 
@@ -114,8 +116,10 @@ def build(repository = nil, version = nil, backoffice = false, cuddy_token)
   #   "config" => { "unicorn" => { "workers" => integer },      # only if not back office
   #     "db" => {"hostname" => string, "database" => string, "username" => string, "token" => string}   # only if not back office
   #   }
-  status = {"name" => path, "version" => version, "started_at" => start_time, "finished_at" => Time.now, "backoffice" => backoffice}.to_json
-  @redis_deploy.set(cuddy_token,status)
+  if cuddy_token
+    status = {"name" => path, "version" => version, "started_at" => start_time, "finished_at" => Time.now, "backoffice" => backoffice}.to_json
+    redis_deploy.set(cuddy_token,status)
+  end
 end
 
 logger("info", "starting")
