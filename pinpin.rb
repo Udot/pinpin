@@ -74,7 +74,7 @@ def build(repository = nil, version = nil, backoffice = false, cuddy_token)
     img_root = "#{@config["build"]["root"]}"
     logger("info", "bundle install #{repository} #{version}")
     FileUtils.mkdir_p("#{@config["build"]["root"]}/#{path}/#{version}/vendor/bundle")
-    bundle_log = `cd #{@config["build"]["root"]}/#{path}/#{version} && bundle install --deployment --without development,test`
+    bundle_log = `cd #{@config["build"]["root"]}/#{path}/#{version} && bundle install --deployment --without development test`
     raise SystemCallError, bundle_log unless $?.to_i == 0
     raise ArgumentError, "bundled in the wrong place" unless File.exist?("#{@config["build"]["root"]}/#{path}/#{version}/vendor/bundle")
     
