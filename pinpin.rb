@@ -7,6 +7,25 @@ require "digest/sha1"
 require "yaml"
 require "fileutils"
 
+class SimpleLogger
+  def initialize(file)
+    @log_file = file
+  end
+
+  def info(msg)
+    write("info",msg)
+  end
+  def warn(msg)
+    write("warn",msg)
+  end
+  def error(msg)
+    write("error",msg)
+  end
+  def write(level, msg)
+    File.open(log_file, "a") { |f| f.puts "#{level[0].capitalize} :: #{Time.now.to_s} : #{msg}"}
+  end
+end
+
 def is_mac?
   RUBY_PLATFORM.downcase.include?("darwin")
 end
@@ -22,7 +41,8 @@ end
 
 @current_path = File.expand_path(File.dirname(__FILE__))
 require "#{@current_path}/lib/remote_syslog"
-LOGGER = RemoteSyslog.new(Settings.remote_log_host,Settings.remote_log_port)
+LOGGER = RemoteSyslog.new(Settings.remote_log_host,Settings.remote_log_port) if environment == "production"
+LOGGER = SimpleLogger.new("sinatra.log") if environment == "development"
 @config = YAML.load_file("#{@current_path}/config.yml")[environment]
 # queue in
 @redis = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => @config['redis']['database'])
