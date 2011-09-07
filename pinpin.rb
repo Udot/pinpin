@@ -56,7 +56,7 @@ def logger
 end
 
 class Build
-  attr_accessor :name, :repository, :version, :cuddy_token, :start_time
+  attr_accessor :name, :repository, :version, :cuddy_token, :start_time, :db_string, :current_path
   def initialize(name, repository, db_string, cuddy_token)
     logger.info("initializing build for #{name}")
     @name = name
