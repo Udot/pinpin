@@ -45,11 +45,11 @@ LOGGER = RemoteSyslog.new(Settings.remote_log_host,Settings.remote_log_port) if 
 LOGGER = SimpleLogger.new("sinatra.log") if environment == "development"
 @config = YAML.load_file("#{@current_path}/config.yml")[environment]
 # queue in
-@redis = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => @config['redis']['database'])
+@redis = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => @config['redis']['db'])
 # queue out
-@redis_cuddy = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => @config['redis']['cuddy_database'])
+@redis_cuddy = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => @config['redis']['cuddy_db'])
 # global status db
-@redis_global = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => @config['redis']['status_database'])
+@redis_global = Redis.new(:host => @config['redis']['host'], :port => @config['redis']['port'], :password => @config['redis']['password'], :db => @config['redis']['status_db'])
 
 def logger
   LOGGER
