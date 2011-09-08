@@ -57,8 +57,10 @@ end
 
 class Build
   attr_accessor :name, :repository, :version, :cuddy_token, :start_time, :db_string, :current_path
+  attr_accessor :config, :redis_cuddy, :redis_global
   def initialize(name, repository, db_string, cuddy_token)
     logger.info("initializing build for #{name}")
+    @config = YAML.load_file("#{@current_path}/config.yml")[environment]
     @name = name
     @repository = repository
     @cuddy_token = cuddy_token
@@ -75,6 +77,11 @@ class Build
       end
     end
     @version = repositories[name]["version"]
+    # queue out
+    @redis_cuddy = Redis.new(:host => config['redis']['host'], :port => config['redis']['port'], :password => config['redis']['password'], :db => config['redis']['cuddy_db'])
+    # global status db
+    @redis_global = Redis.new(:host => config['redis']['host'], :port => config['redis']['port'], :password => config['redis']['password'], :db => config['redis']['status_db'])
+    
   end
 
   def next_version
@@ -82,14 +89,14 @@ class Build
   end
 
   def start_time_from_redis
-    node = @redis_global.get(name)
+    node = redis_global.get(name)
     return JSON.parse(node)['started_at'] if node != nil
     return Time.now
   end
 
   def run
     status = {"status" => "building", "version" => build.version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
-    @redis_global.set(build.name, status)
+    redis_global.set(build.name, status)
     logger.info("cloning build for #{name}")
     self.version = next_version
     FileUtils.mkdir("/var/build/#{name}") unless File.exist?("/var/build/#{name}")
@@ -126,7 +133,7 @@ class Build
     directory.files.create(:key => "#{name}-#{version}.tar.gz", :body => File.open("/var/build/#{name}/#{name}-#{version}.tar.gz"))
     FileUtils.rm_rf("/var/build/#{name}/#{name}-#{version}.tar.gz") if File.exist?("/var/build/#{name}/#{name}-#{version}.tar.gz")
     status = {"status" => "uploaded", "version" => build.version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
-    @redis_global.set(build.name, status)
+    redis_global.set(build.name, status)
   end
 
   # removes old stuff from the cloud
@@ -156,7 +163,7 @@ class Build
     #   }
     # }
     status = {"status" => "queued for deployment", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
-    @redis_global.set(build.name, status)
+    redis_global.set(build.name, status)
     # passing the ball to cuddy
     # key is token of the cuddy node, value is array, each item using following format : 
     #   {  "name" => string,           # the name of the app
@@ -164,14 +171,14 @@ class Build
     #      "db_string" => string,      # basis for pwd
     # }
     status_hash = {"name" => name, "version" => version, "db_string" => db_string}
-    queue = JSON.parse(@redis_cuddy.get(cuddy_token)) if @redis_cuddy.get(cuddy_token)
+    queue = JSON.parse(redis_cuddy.get(cuddy_token)) if redis_cuddy.get(cuddy_token)
     queue ||= Array.new
     queue << status_hash
-    @redis_cuddy.set(cuddy_token, queue.to_json)
+    redis_cuddy.set(cuddy_token, queue.to_json)
   end
 end
 
-logger.info ("Starting the wait cycle")
+logger.info("Starting the wait cycle")
 while true
   queue = JSON.parse(@redis.get("queue"))
   while queue.count != 0
@@ -180,7 +187,7 @@ while true
     # each item has following format :
     #   {  "name" => string,           # the name of the app
     #      "repository" => string,     # the url of the git repository
-    #       "db_string" => string,     # basis for the pwd
+    #       "db_string" => string,     # basis for the pwd, passed down "as is" to deployer node
     #      "cuddy_token" => string     # the token of the host that will host it
     #   }
     build = Build.new(app['name'], app['repository'], app['db_string'], app['cuddy_token'])
