@@ -95,14 +95,34 @@ class Build
   end
 
   def run
+    if (not File.exist?("/var/build/#{name}/#{version}/Gemfile.lock")) || (not File.exist?("/var/build/#{name}/#{version}/Gemfile"))
+      status = {"status" => "fail", "version" => build.version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "gemfile or gemfile.lock missing", "backtrace" => ""}}.to_json
+      redis_global.set(build.name, status)
+      logger.error("Gemfile or Gemfile.lock missing")
+      return false
+    end
     status = {"status" => "building", "version" => build.version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
     redis_global.set(build.name, status)
     logger.info("cloning build for #{name}")
     self.version = next_version
+    # creating directory
     FileUtils.mkdir("/var/build/#{name}") unless File.exist?("/var/build/#{name}")
     Dir.chdir("/var/build/#{name}")
+    
+    # cloning
     clone_shallow = `git clone --depth 1 #{repository} #{version}`
     FileUtils.rm_rf("#{version}/.git")
+    
+    # inserting unicorn in Gemfile and Gemfile.lock if it's not there already
+    glock = IO.read("/var/build/#{name}/#{version}/Gemfile.lock")
+    if not (glock =~ /unicorn/)
+      File.open("/var/build/#{name}/#{version}/Gemfile", "a") { |f| f.puts "gem \"unicorn\", \"4.1.1\"" }
+      glock.gsub!(/^$\nPLATFORMS/"    unicorn \(4.1.1\)\n      kgio \(~> 2.4\)\n      rack\n      raindrops \(~> 0.6\)\n\nPLATFORM"/)
+      if File.exist?("/var/build/#{name}/#{version}/Gemfile.lock")
+        File.open("/var/build/#{name}/#{version}/Gemfile.lock") { |f| f.puts glock }
+      end
+    end
+    
     logger.info("bundling #{name} v#{version} in /var/build/#{name}/#{version}")
     Dir.chdir("/var/build/#{name}/#{version}")
     log = `bundle install --deployment --without development test`
