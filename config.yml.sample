@@ -21,7 +21,9 @@
   "build":
     "root": "/var/build"
   "rackspace_auth_url": "https://lon.auth.api.rackspacecloud.com/v1.0"
-    "rackspace_api_key": "thekey"
-    "rackspace_username": "theusername"
-    "logfile": '/var/log/pinpin_builder/builder.log'
+  "rackspace_api_key": "thekey"
+  "rackspace_username": "theusername"
+  "logfile": '/var/log/pinpin_builder/builder.log'
+  remote_log_host: 31.222.188.130
+  remote_log_port: 514
 
