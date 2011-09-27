@@ -60,7 +60,12 @@ class Build
   attr_accessor :config, :redis_cuddy, :redis_global
   def initialize(name, repository, db_string, cuddy_token)
     logger.info("initializing build for #{name}")
+    @current_path = File.expand_path(File.dirname(__FILE__))
     @config = YAML.load_file("#{@current_path}/config.yml")[environment]
+    # queue out
+    @redis_cuddy = Redis.new(:host => config['redis']['host'], :port => config['redis']['port'], :password => config['redis']['password'], :db => config['redis']['cuddy_db'])
+    # global status db
+    @redis_global = Redis.new(:host => config['redis']['host'], :port => config['redis']['port'], :password => config['redis']['password'], :db => config['redis']['status_db'])
     @name = name
     @repository = repository
     @cuddy_token = cuddy_token
@@ -76,16 +81,11 @@ class Build
         YAML.dump(repositories, out)
       end
     end
-    @version = repositories[name]["version"]
-    # queue out
-    @redis_cuddy = Redis.new(:host => config['redis']['host'], :port => config['redis']['port'], :password => config['redis']['password'], :db => config['redis']['cuddy_db'])
-    # global status db
-    @redis_global = Redis.new(:host => config['redis']['host'], :port => config['redis']['port'], :password => config['redis']['password'], :db => config['redis']['status_db'])
-    
+    @version = repositories[name]["version"]   
   end
 
   def next_version
-    return version + 1
+    return (version.to_i + 1).to_s
   end
 
   def start_time_from_redis
@@ -95,29 +95,31 @@ class Build
   end
 
   def run
-    if (not File.exist?("/var/build/#{name}/#{version}/Gemfile.lock")) || (not File.exist?("/var/build/#{name}/#{version}/Gemfile"))
-      status = {"status" => "fail", "version" => build.version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "gemfile or gemfile.lock missing", "backtrace" => ""}}.to_json
-      redis_global.set(build.name, status)
-      logger.error("Gemfile or Gemfile.lock missing")
-      return false
-    end
-    status = {"status" => "building", "version" => build.version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
-    redis_global.set(build.name, status)
-    logger.info("cloning build for #{name}")
-    self.version = next_version
     # creating directory
     FileUtils.mkdir("/var/build/#{name}") unless File.exist?("/var/build/#{name}")
     Dir.chdir("/var/build/#{name}")
-    
+    status = {"status" => "building", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
+    redis_global.set(name, status)
+    logger.info("cloning build for #{name}")
+    self.version = next_version
+    # ensure that the next version dir is not there already
+    FileUtils.rm_rf("#{version}") if File.exist?("/var/build/#{name}/#{version}")
     # cloning
     clone_shallow = `git clone --depth 1 #{repository} #{version}`
     FileUtils.rm_rf("#{version}/.git")
+    # checking if Gemfile and Gemfile.lock exist
+    if (not File.exist?("/var/build/#{name}/#{version}/Gemfile.lock")) || (not File.exist?("/var/build/#{name}/#{version}/Gemfile"))
+      status = {"status" => "fail", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "gemfile or gemfile.lock missing", "backtrace" => ""}}.to_json
+      redis_global.set(name, status)
+      logger.error("Gemfile or Gemfile.lock missing")
+      return false
+    end
     
     # inserting unicorn in Gemfile and Gemfile.lock if it's not there already
     glock = IO.read("/var/build/#{name}/#{version}/Gemfile.lock")
     if not (glock =~ /unicorn/)
       File.open("/var/build/#{name}/#{version}/Gemfile", "a") { |f| f.puts "gem \"unicorn\", \"4.1.1\"" }
-      glock.gsub!(/^$\nPLATFORMS/"    unicorn \(4.1.1\)\n      kgio \(~> 2.4\)\n      rack\n      raindrops \(~> 0.6\)\n\nPLATFORM"/)
+      glock.gsub!(/^$\nPLATFORMS/,"    unicorn \(4.1.1\)\n      kgio \(~> 2.4\)\n      rack\n      raindrops \(~> 0.6\)\n\nPLATFORM")
       if File.exist?("/var/build/#{name}/#{version}/Gemfile.lock")
         File.open("/var/build/#{name}/#{version}/Gemfile.lock") { |f| f.puts glock }
       end
@@ -129,16 +131,17 @@ class Build
     Dir.chdir("/var/build/#{name}")
     logger.info("packing #{name} v#{version}")
     log = `tar -czf /var/build/#{name}/#{name}-#{version}.tar.gz #{version}`
+    logger.info("Archive created") if File.exist?("/var/build/#{name}/#{name}-#{version}.tar.gz")
     logger.info("cleaning up #{name} #{version} build folder")
     FileUtils.rm_rf("/var/build/#{name}/#{version}")
   end
 
   def save
     logger.info("saving #{name} version (v#{version})")
-    repositories = YAML.load_file(@current_path + "/config/repositories.yml") if File.exist?(@current_path + "/config/repositories.yml")
+    repositories = YAML.load_file(current_path + "/config/repositories.yml") if File.exist?(current_path + "/config/repositories.yml")
     repositories[name] = {"name" => name, "repository" => repository, "version" => version}
-    FileUtils.mkdir(@current_path + "/config") unless File.exist?(@current_path + "/config")
-    File.open(@current_path + "/config/repositories.yml", 'w' ) do |out|
+    FileUtils.mkdir(current_path + "/config") unless File.exist?(current_path + "/config")
+    File.open(current_path + "/config/repositories.yml", 'w' ) do |out|
       YAML.dump(repositories, out)
     end
   end
@@ -146,14 +149,13 @@ class Build
   def upload
     logger.info("uploading #{name} v#{version} in the Cloud")
     current_path = File.expand_path(File.dirname(__FILE__))
-  	config = YAML.load_file(current_path + "/config.yml")
-  	rs_dir = "sqshed_apps"
+    rs_dir = "sqshed_apps"
   	storage = Fog::Storage.new(:provider => 'Rackspace', :rackspace_auth_url => config["rackspace_auth_url"], :rackspace_api_key => config["rackspace_api_key"], :rackspace_username => config['rackspace_username'])
     directory = storage.directories.get(rs_dir)
     directory.files.create(:key => "#{name}-#{version}.tar.gz", :body => File.open("/var/build/#{name}/#{name}-#{version}.tar.gz"))
     FileUtils.rm_rf("/var/build/#{name}/#{name}-#{version}.tar.gz") if File.exist?("/var/build/#{name}/#{name}-#{version}.tar.gz")
-    status = {"status" => "uploaded", "version" => build.version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
-    redis_global.set(build.name, status)
+    status = {"status" => "uploaded", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
+    redis_global.set(name, status)
   end
 
   # removes old stuff from the cloud
@@ -173,7 +175,6 @@ class Build
   def register
     puts "register"
     current_path = File.expand_path(File.dirname(__FILE__))
-  	config = YAML.load_file(current_path + "/config.yml")
   	#  {"version" => integer,      # the version number
     #   "name" => string,           # the name of the app
     #   "status" => string,         # starts with "waiting"
@@ -183,7 +184,7 @@ class Build
     #   }
     # }
     status = {"status" => "queued for deployment", "version" => version, "started_at" => start_time, "finished_at" => Time.now, "error" => {"message" => "", "backtrace" => ""}}.to_json
-    redis_global.set(build.name, status)
+    redis_global.set(name, status)
     # passing the ball to cuddy
     # key is token of the cuddy node, value is array, each item using following format : 
     #   {  "name" => string,           # the name of the app
